@@ -24,9 +24,11 @@ def log(indent, message, color=None):
 
 
 def fetch_server(args):
-    if args.resource:
+    if args.resource and args.username and args.password:
         user = MyPlexUser.signin(args.username, args.password)
         return user.getResource(args.resource).connect(), user
+    elif args.baseuri and args.token:
+        return server.PlexServer(args.baseuri, args.token), None
     return server.PlexServer(), None
 
 
@@ -49,14 +51,13 @@ def run_tests(module, args):
         log(0, test.__name__)
         try:
             test(plex, user)
-            log(2, 'PASS!', 'blue')
+            runtime = time.time() - starttime
+            queries = server.TOTAL_QUERIES - startqueries
+            log(2, 'PASS! (runtime: %.3fs; queries: %s)' % (runtime, queries), 'blue')
             tests['passed'] += 1
         except Exception as err:
             log(2, 'FAIL!: %s' % err, 'red')
             tests['failed'] += 1
-        runtime = time.time() - starttime
-        log(2, 'Runtime: %.3fs' % runtime)
-        log(2, 'Queries: %s' % (server.TOTAL_QUERIES - startqueries))
         log(0, '')
     log(0, 'Tests Run:    %s' % sum(tests.values()))
     log(0, 'Tests Passed: %s' % tests['passed'])

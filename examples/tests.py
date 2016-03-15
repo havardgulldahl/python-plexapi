@@ -11,6 +11,7 @@ import argparse, sys, time
 from os.path import dirname, abspath
 sys.path.append(dirname(dirname(abspath(__file__))))
 from utils import log, run_tests
+from plexapi.utils import NA
 
 SHOW_SECTION = 'TV Shows'
 SHOW_TITLE = 'Game of Thrones'
@@ -50,6 +51,17 @@ def test_003_search_show(plex, user=None):
     assert result_server, 'Show not found.'
     assert result_server == result_shows, 'Show searches not consistent.'
     assert not result_movies, 'Movie search returned show title.'
+    
+
+def test_003b_search_show(plex, user=None):
+    show_title = "Marvel's Daredevil"  # Test ' in show title
+    result_server = plex.search(show_title)
+    result_shows = plex.library.section(SHOW_SECTION).search(show_title)
+    log(2, 'Searching for: %s' % SHOW_TITLE)
+    log(4, 'Result Server: %s' % result_server)
+    log(4, 'Result Shows: %s' % result_shows)
+    assert result_server, 'Show not found.'
+    assert result_server == result_shows, 'Show searches not consistent.'
 
 
 def test_004_search_movie(plex, user=None):
@@ -65,6 +77,33 @@ def test_004_search_movie(plex, user=None):
     assert result_server, 'Movie not found.'
     assert result_server == result_library == result_movies, 'Movie searches not consistent.'
     assert not result_shows, 'Show search returned show title.'
+    
+
+def test_004b_search_movie(plex, user=None):
+    movie_title = 'Bedside Detective'
+    result_server = plex.search(movie_title)
+    result_library = plex.library.search(movie_title)
+    result_movies = plex.library.section(MOVIE_SECTION).search(movie_title)
+    log(2, 'Searching for: %s' % movie_title)
+    log(4, 'Result Server: %s' % result_server)
+    log(4, 'Result Library: %s' % result_library)
+    log(4, 'Result Movies: %s' % result_movies)
+    assert result_server, 'Movie not found.'
+    assert result_server == result_library == result_movies, 'Movie searches not consistent.'
+    
+
+def test_004c_original_title_of_foreign_movie(plex, user=None):
+    movie_title = 'Bedside Detective'
+    result = plex.search(movie_title)
+    log(2, 'Title: %s' % result[0].title)
+    log(2, 'Original Title: %s' % result[0].originalTitle)
+    assert(result[0].originalTitle != NA)
+    
+
+def test_004d_refresh_video(plex, user=None):
+    movie_title = 'Bedside Detective'
+    result = plex.search(movie_title)
+    result[0].refresh()
 
 
 def test_005_navigate_to_show(plex, user=None):
@@ -161,7 +200,9 @@ def test_011_play_media(plex, user=None):
 
 def test_012_myplex_account(plex, user=None):
     account = plex.account()
-    print(account.__dict__)
+    log(2, 'username: %s' % account.username)
+    log(2, 'subscriptionActive: %s' % account.subscriptionActive)
+    log(2, 'subscriptionState: %s' % account.subscriptionState)
 
 
 def test_013_list_media_files(plex, user=None):
@@ -208,8 +249,7 @@ def test_014_list_video_tags(plex, user=None):
 
 def test_015_list_devices(plex, user=None):
     assert user, 'Must specify username, password & resource to run this test.'
-    for device in user.resources():
-        log(2, device.name or device.product)
+    log(2, ', '.join([r.name or r.product for r in user.resources()]))
 
 
 # def test_016_sync_items(plex, user=None):
@@ -235,11 +275,27 @@ def test_017_is_watched(plex, user=None):
     log(2, '%s is_watched: %s' % (movie.title, movie.is_watched))
 
 
+def test_018_fetch_details_not_in_search_result(plex, user=None):
+    # Search results only contain 3 actors per movie. This text checks there
+    # are more than 3 results in the actor list (meaning it fetched the detailed
+    # information behind the scenes).
+    result = plex.search(MOVIE_TITLE)[0]
+    actors = result.actors
+    assert len(actors) >= 4, 'Unable to fetch detailed movie information'
+    log(2, '%s actors found.' % len(actors))
+
+
 if __name__ == '__main__':
+    # There are three ways to authenticate:
+    #  1. If the server is running on localhost, just run without any auth.
+    #  2. Pass in --username, --password, and --resource.
+    #  3. Pass in --baseuri, --token
     parser = argparse.ArgumentParser(description='Run PlexAPI tests.')
     parser.add_argument('-r', '--resource', help='Name of the Plex resource (requires user/pass).')
+    parser.add_argument('-n', '--name', help='Only run tests containing this string. Leave blank to run all tests.')
     parser.add_argument('-u', '--username', help='Username for the Plex server.')
     parser.add_argument('-p', '--password', help='Password for the Plex server.')
-    parser.add_argument('-n', '--name', help='Only run tests containing this string. Leave blank to run all tests.')
+    parser.add_argument('-b', '--baseuri', help='Baseuri needed for auth token authentication')
+    parser.add_argument('-t', '--token', help='Auth token (instead of user/pass)')
     args = parser.parse_args()
     run_tests(__name__, args)
