@@ -4,19 +4,15 @@ PlexServer
 import requests
 from requests.status_codes import _codes as codes
 from plexapi import BASE_HEADERS, TIMEOUT
-from plexapi import log, video, audio
+from plexapi import log, utils
+from plexapi import audio, video  # flake8:noqa; required
+from plexapi.compat import quote
 from plexapi.client import Client
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.library import Library
 from plexapi.myplex import MyPlexAccount
 from plexapi.playqueue import PlayQueue
 from xml.etree import ElementTree
-
-
-try:
-    from urllib import quote  # Python2
-except ImportError:
-    from urllib.parse import quote  # Python3
 
 TOTAL_QUERIES = 0
 DEFAULT_BASEURI = 'http://localhost:32400'
@@ -27,7 +23,7 @@ class PlexServer(object):
     def __init__(self, baseuri=None, token=None, session=None):
         self.baseuri = baseuri or DEFAULT_BASEURI
         self.token = token
-        self.session = session  # set this as a requests.session to use that session
+        self.session = session or requests.Session()
         data = self._connect()
         self.friendlyName = data.attrib.get('friendlyName')
         self.machineIdentifier = data.attrib.get('machineIdentifier')
@@ -85,11 +81,7 @@ class PlexServer(object):
         global TOTAL_QUERIES
         TOTAL_QUERIES += 1
         url = self.url(path)
-        if method is None:
-            if self.session is not None:
-                method = self.session.get
-            else:
-                method = requests.get
+        method = method or self.session.get
         log.info('%s %s', method.__name__.upper(), url)
         response = method(url, headers=self.headers(), timeout=TIMEOUT, **kwargs)
         if response.status_code not in [200, 201]:
@@ -97,23 +89,15 @@ class PlexServer(object):
             raise BadRequest('(%s) %s' % (response.status_code, codename))
         data = response.text.encode('utf8')
         return ElementTree.fromstring(data) if data else None
-
+        
     def search(self, query, mediatype=None):
-        query = quote(query)
-        items = video.list_items(self, '/search?query=%s' % query)
-        if mediatype:
-            return [item for item in items if item.type == mediatype]
-        return items
-
-    def searchAudio(self, query, mediatype=None):
-        query = quote(query)
-        items = audio.list_items(self, '/search?query=%s' % query)
+        items = utils.list_items(self, '/search?query=%s' % quote(query))
         if mediatype:
             return [item for item in items if item.type == mediatype]
         return items
 
     def sessions(self):
-        return video.list_items(self, '/status/sessions')
+        return utils.list_items(self, '/status/sessions')
 
     def url(self, path):
         if self.token:
