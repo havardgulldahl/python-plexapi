@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
 """
 Test Library Functions
 """
-import inspect, sys, traceback
+import sys, traceback
 import datetime, time
 from plexapi import server
-from plexapi.myplex import MyPlexUser
+from plexapi.client import PlexClient
+from plexapi.exceptions import NotFound
+from plexapi.myplex import MyPlexAccount
 
 COLORS = {'blue':'\033[94m', 'green':'\033[92m', 'red':'\033[91m', 'yellow':'\033[93m', 'end':'\033[0m'}
 
@@ -13,7 +16,7 @@ registered = []
 def register(tags=''):
     def wrap2(func):
         registered.append({'name':func.__name__, 'tags':tags.split(','), 'func':func})
-        def wrap1(*args, **kwargs):  # flake8:noqa
+        def wrap1(*args, **kwargs):  # noqa
             func(*args, **kwargs)
         return wrap1
     return wrap2
@@ -28,11 +31,22 @@ def log(indent, message, color=None):
 
 def fetch_server(args):
     if args.resource and args.username and args.password:
-        user = MyPlexUser.signin(args.username, args.password)
-        return user.getResource(args.resource).connect(), user
-    elif args.baseuri and args.token:
-        return server.PlexServer(args.baseuri, args.token), None
+        log(0, 'Signing in as MyPlex account %s..' % args.username)
+        account = MyPlexAccount.signin(args.username, args.password)
+        log(0, 'Connecting to Plex server %s..' % args.resource)
+        return account.resource(args.resource).connect(), account
+    elif args.baseurl and args.token:
+        log(0, 'Connecting to Plex server %s..' % args.baseurl)
+        return server.PlexServer(args.baseurl, args.token), None
     return server.PlexServer(), None
+
+
+def safe_client(name, baseurl, server):
+    try:
+        return server.client(name)
+    except NotFound as err:
+        log(2, 'Warning: %s' % err)
+        return PlexClient(baseurl, server=server)
 
 
 def iter_tests(query):
@@ -43,22 +57,20 @@ def iter_tests(query):
         elif tags:
             matching_tags = [t for t in tags if t in test['tags']]
             if matching_tags: yield test
-        elif query in test['name']:
+        elif query == test['name']:
             yield test
 
 
 def run_tests(module, args):
-    plex, user = fetch_server(args)
+    plex, account = fetch_server(args)
     tests = {'passed':0, 'failed':0}
     for test in iter_tests(args.query):
-        startqueries = server.TOTAL_QUERIES
         starttime = time.time()
         log(0, '%s (%s)' % (test['name'], ','.join(test['tags'])))
         try:
-            test['func'](plex, user)
+            test['func'](plex, account)
             runtime = time.time() - starttime
-            queries = server.TOTAL_QUERIES - startqueries
-            log(2, 'PASS! (runtime: %.3fs; queries: %s)' % (runtime, queries), 'blue')
+            log(2, 'PASS! (runtime: %.3fs)' % runtime, 'blue')
             tests['passed'] += 1
         except Exception as err:
             errstr = str(err)

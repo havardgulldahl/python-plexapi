@@ -28,13 +28,13 @@ plex = PlexServer()   # Defaults to localhost:32400
 
 If you want to avoid logging into MyPlex and you already know your auth token
 string, you can use the PlexServer object directly as above, but passing in
-the baseuri and auth token directly.
+the baseurl and auth token directly.
 
 ```python
-from plexapi.server import MyPlexUser
-baseuri = 'http://plexserver:32400'
+from plexapi.server import MyPlexAccount
+baseurl = 'http://plexserver:32400'
 token = '2ffLuB84dqLswk9skLos'
-plex = PlexServer(baseuri, token)
+plex = PlexServer(baseurl, token)
 ```
 
 If you are running on a separate network or using Plex Users you can log
@@ -44,9 +44,9 @@ logged into Plex Web you can see the server name in the top left above your
 available libraries.
 
 ```python
-from plexapi.myplex import MyPlexUser
-user = MyPlexUser.signin('<USERNAME>', '<PASSWORD>')
-plex = user.getResource('<SERVERNAME>').connect()  # returns a PlexServer instance
+from plexapi.myplex import MyPlexAccount
+account = MyPlexAccount.signin('<USERNAME>', '<PASSWORD>')
+plex = account.resource('<SERVERNAME>').connect()  # returns a PlexServer instance
 ```
 
 
@@ -90,8 +90,8 @@ for movie in movies.search(None, director=director):
 ```
 ```python
 # Example 7: List files for the latest episode of Friends.
-the_last_one = plex.library.get('Friends').episodes()[-1]
-for part in the_last_one.iter_parts():
+thelastone = plex.library.get('Friends').episodes()[-1]
+for part in thelastone.iterParts():
     print(part.file)
 ```
 ```python
@@ -99,6 +99,12 @@ for part in the_last_one.iter_parts():
 jurassic_park = plex.library.section('Movies').get('Jurassic Park')
 print 'Run running the following command to play in VLC:'
 print 'vlc "%s"' % jurassic_park.getStreamUrl(videoResolution='800x600')
+```
+
+```python
+# Example 9: Get audio/video/all playlists
+for playlist in self.plex.playlists():
+    print(playlist.title)
 ```
 
 #### FAQs ####
@@ -117,4 +123,8 @@ server provides. If we are not providing an API that is offerered in the
 XML pages, please let us know! -- Adding additional features beyond that
 should be done outside the scope of this library.
 
-[![Analytics](https://ga-beacon.appspot.com/UA-87461-7/python-plexapi/home)](https://github.com/igrigorik/ga-beacon)
+**Q. What are some helpful links if trying to understand the raw Plex API?**
+
+* https://github.com/plexinc/plex-media-player/wiki/Remote-control-API
+* https://forums.plex.tv/discussion/104353/pms-web-api-documentation
+* https://github.com/Arcanemagus/plex-api/wiki

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 PlexServer
 """
@@ -5,23 +6,21 @@ import requests
 from requests.status_codes import _codes as codes
 from plexapi import BASE_HEADERS, TIMEOUT
 from plexapi import log, utils
-from plexapi import audio, video  # flake8:noqa; required
+from plexapi import audio, video, playlist  # noqa; required
 from plexapi.compat import quote
-from plexapi.client import Client
+from plexapi.client import PlexClient
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.library import Library
-from plexapi.myplex import MyPlexAccount
 from plexapi.playqueue import PlayQueue
 from xml.etree import ElementTree
 
-TOTAL_QUERIES = 0
-DEFAULT_BASEURI = 'http://localhost:32400'
+DEFAULT_BASEURL = 'http://localhost:32400'
 
 
 class PlexServer(object):
 
-    def __init__(self, baseuri=None, token=None, session=None):
-        self.baseuri = baseuri or DEFAULT_BASEURI
+    def __init__(self, baseurl=None, token=None, session=None):
+        self.baseurl = baseurl or DEFAULT_BASEURL
         self.token = token
         self.session = session or requests.Session()
         data = self._connect()
@@ -39,14 +38,14 @@ class PlexServer(object):
         self.version = data.attrib.get('version')
 
     def __repr__(self):
-        return '<%s:%s>' % (self.__class__.__name__, self.baseuri)
+        return '<%s:%s>' % (self.__class__.__name__, self.baseurl)
 
     def _connect(self):
         try:
             return self.query('/')
         except Exception as err:
-            log.error('%s: %s', self.baseuri, err)
-            raise NotFound('No server found at: %s' % self.baseuri)
+            log.error('%s: %s', self.baseurl, err)
+            raise NotFound('No server found at: %s' % self.baseurl)
 
     @property
     def library(self):
@@ -54,36 +53,49 @@ class PlexServer(object):
 
     def account(self):
         data = self.query('/myplex/account')
-        return MyPlexAccount(self, data)
+        return Account(self, data)
 
     def clients(self):
         items = []
         for elem in self.query('/clients'):
-            items.append(Client(self, elem))
+            baseurl = 'http://%s:%s' % (elem.attrib['address'], elem.attrib['port'])
+            items.append(PlexClient(baseurl, server=self, data=elem))
         return items
 
     def client(self, name):
         for elem in self.query('/clients'):
             if elem.attrib.get('name').lower() == name.lower():
-                return Client(self, elem)
+                baseurl = 'http://%s:%s' % (elem.attrib['address'], elem.attrib['port'])
+                return PlexClient(baseurl, server=self, data=elem)
         raise NotFound('Unknown client name: %s' % name)
 
-    def createPlayQueue(self, video):
-        return PlayQueue.create(self, video)
+    def createPlayQueue(self, item):
+        return PlayQueue.create(self, item)
 
     def headers(self):
         headers = BASE_HEADERS
         if self.token:
             headers['X-Plex-Token'] = self.token
         return headers
+        
+    def history(self):
+        return utils.listItems(self, '/status/sessions/history/all')
+        
+    def playlists(self):
+        return utils.listItems(self, '/playlists')
+        
+    def playlist(self, title=None):  # noqa
+        for item in self.playlists():
+            if item.title == title:
+                return item
+        raise NotFound('Invalid playlist title: %s' % title)
 
-    def query(self, path, method=None, **kwargs):
-        global TOTAL_QUERIES
-        TOTAL_QUERIES += 1
+    def query(self, path, method=None, headers=None, **kwargs):
         url = self.url(path)
         method = method or self.session.get
         log.info('%s %s', method.__name__.upper(), url)
-        response = method(url, headers=self.headers(), timeout=TIMEOUT, **kwargs)
+        headers = dict(self.headers(), **(headers or {}))
+        response = method(url, headers=headers, timeout=TIMEOUT, **kwargs)
         if response.status_code not in [200, 201]:
             codename = codes.get(response.status_code)[0]
             raise BadRequest('(%s) %s' % (response.status_code, codename))
@@ -91,16 +103,38 @@ class PlexServer(object):
         return ElementTree.fromstring(data) if data else None
         
     def search(self, query, mediatype=None):
-        items = utils.list_items(self, '/search?query=%s' % quote(query))
+        """ Searching within a library section is much more powerful. """
+        items = utils.listItems(self, '/search?query=%s' % quote(query))
         if mediatype:
             return [item for item in items if item.type == mediatype]
         return items
 
     def sessions(self):
-        return utils.list_items(self, '/status/sessions')
+        return utils.listItems(self, '/status/sessions')
 
     def url(self, path):
         if self.token:
             delim = '&' if '?' in path else '?'
-            return '%s%s%sX-Plex-Token=%s' % (self.baseuri, path, delim, self.token)
-        return '%s%s' % (self.baseuri, path)
+            return '%s%s%sX-Plex-Token=%s' % (self.baseurl, path, delim, self.token)
+        return '%s%s' % (self.baseurl, path)
+
+
+# This is the locally cached MyPlex account information. The properties provided don't match
+# the myplex.MyPlexAccount object very well. I believe this is here because access to myplex
+# is not required to get basic plex information.
+class Account(object):
+
+    def __init__(self, server, data):
+        self.authToken = data.attrib.get('authToken')
+        self.username = data.attrib.get('username')
+        self.mappingState = data.attrib.get('mappingState')
+        self.mappingError = data.attrib.get('mappingError')
+        self.mappingErrorMessage = data.attrib.get('mappingErrorMessage')
+        self.signInState = data.attrib.get('signInState')
+        self.publicAddress = data.attrib.get('publicAddress')
+        self.publicPort = data.attrib.get('publicPort')
+        self.privateAddress = data.attrib.get('privateAddress')
+        self.privatePort = data.attrib.get('privatePort')
+        self.subscriptionFeatures = data.attrib.get('subscriptionFeatures')
+        self.subscriptionActive = data.attrib.get('subscriptionActive')
+        self.subscriptionState = data.attrib.get('subscriptionState')

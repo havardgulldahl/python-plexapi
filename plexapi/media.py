@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 PlexAPI Media
 """
@@ -25,7 +26,7 @@ class Media(object):
         self.videoFrameRate = data.attrib.get('videoFrameRate')
         self.optimizedForStreaming = cast(bool, data.attrib.get('optimizedForStreaming'))
         self.optimizedForStreaming = cast(bool, data.attrib.get('has64bitOffsets'))
-        self.parts = [MediaPart(server, elem, initpath, self) for elem in data]
+        self.parts = [MediaPart(server, e, initpath, self) for e in data]
 
     def __repr__(self):
         title = self.video.title.replace(' ','.')[0:20]
@@ -45,104 +46,98 @@ class MediaPart(object):
         self.file = data.attrib.get('file')
         self.size = cast(int, data.attrib.get('size'))
         self.container = data.attrib.get('container')
-        self.streams = [
-            MediaPartStream.parse(self.server, elem, self.initpath, self)
-            for elem in data if elem.tag == MediaPartStream.TYPE
-        ]
+        self.streams = [MediaPartStream.parse(self.server, e, self.initpath, self) for e in data if e.tag == 'Stream']
 
     def __repr__(self):
         return '<%s:%s>' % (self.__class__.__name__, self.id)
 
-    def selected_stream(self, stream_type):
+    def selectedStream(self, stream_type):
         streams = filter(lambda x: stream_type == x.type, self.streams)
         selected = list(filter(lambda x: x.selected is True, streams))
         if len(selected) == 0:
             return None
-
         return selected[0]
 
 
 class MediaPartStream(object):
-    TYPE = 'Stream'
+    TYPE = None
+    STREAMTYPE = None
 
     def __init__(self, server, data, initpath, part):
         self.server = server
         self.initpath = initpath
         self.part = part
-        self.id = cast(int, data.attrib.get('id'))
-        self.type = cast(int, data.attrib.get('streamType'))
         self.codec = data.attrib.get('codec')
-        self.selected = cast(bool, data.attrib.get('selected', '0'))
+        self.codecID = data.attrib.get('codecID')
+        self.id = cast(int, data.attrib.get('id'))
         self.index = cast(int, data.attrib.get('index', '-1'))
+        self.language = data.attrib.get('language')
+        self.languageCode = data.attrib.get('languageCode')
+        self.selected = cast(bool, data.attrib.get('selected', '0'))
+        self.streamType = cast(int, data.attrib.get('streamType'))
+        self.type = cast(int, data.attrib.get('streamType'))
 
     @staticmethod
     def parse(server, data, initpath, part):
-        STREAMCLS = {
-            StreamVideo.TYPE: StreamVideo,
-            StreamAudio.TYPE: StreamAudio,
-            StreamSubtitle.TYPE: StreamSubtitle
-        }
-
+        STREAMCLS = {1:VideoStream, 2:AudioStream, 3:SubtitleStream}
         stype = cast(int, data.attrib.get('streamType'))
         cls = STREAMCLS.get(stype, MediaPartStream)
-        # return generic MediaPartStream if type is unknown
         return cls(server, data, initpath, part)
 
     def __repr__(self):
         return '<%s:%s>' % (self.__class__.__name__, self.id)
 
 
-class StreamVideo(MediaPartStream):
-    TYPE = 1
+class VideoStream(MediaPartStream):
+    TYPE = 'videostream'
+    STREAMTYPE = 1
 
     def __init__(self, server, data, initpath, part):
-        super(StreamVideo, self).__init__(server, data, initpath, part)
+        super(VideoStream, self).__init__(server, data, initpath, part)
         self.bitrate = cast(int, data.attrib.get('bitrate'))
-        self.language = data.attrib.get('langauge')
-        self.language_code = data.attrib.get('languageCode')
-        self.bit_depth = cast(int, data.attrib.get('bitDepth'))
+        self.bitDepth = cast(int, data.attrib.get('bitDepth'))
         self.cabac = cast(int, data.attrib.get('cabac'))
-        self.chroma_subsampling = data.attrib.get('chromaSubsampling')
-        self.codec_id = data.attrib.get('codecID')
-        self.color_space = data.attrib.get('colorSpace')
+        self.chromaSubsampling = data.attrib.get('chromaSubsampling')
+        self.colorSpace = data.attrib.get('colorSpace')
         self.duration = cast(int, data.attrib.get('duration'))
-        self.frame_rate = cast(float, data.attrib.get('frameRate'))
-        self.frame_rate_mode = data.attrib.get('frameRateMode')
-        self.has_scalling_matrix = cast(bool, data.attrib.get('hasScallingMatrix'))
+        self.frameRate = cast(float, data.attrib.get('frameRate'))
+        self.frameRateMode = data.attrib.get('frameRateMode')
+        self.hasScallingMatrix = cast(bool, data.attrib.get('hasScallingMatrix'))
         self.height = cast(int, data.attrib.get('height'))
         self.level = cast(int, data.attrib.get('level'))
         self.profile = data.attrib.get('profile')
-        self.ref_frames = cast(int, data.attrib.get('refFrames'))
-        self.scan_type = data.attrib.get('scanType')
+        self.refFrames = cast(int, data.attrib.get('refFrames'))
+        self.scanType = data.attrib.get('scanType')
         self.title = data.attrib.get('title')
         self.width = cast(int, data.attrib.get('width'))
 
 
-class StreamAudio(MediaPartStream):
-    TYPE = 2
+class AudioStream(MediaPartStream):
+    TYPE = 'audiostream'
+    STREAMTYPE = 2
 
     def __init__(self, server, data, initpath, part):
-        super(StreamAudio, self).__init__(server, data, initpath, part)
+        super(AudioStream, self).__init__(server, data, initpath, part)
+        self.audioChannelLayout = data.attrib.get('audioChannelLayout')
         self.channels = cast(int, data.attrib.get('channels'))
         self.bitrate = cast(int, data.attrib.get('bitrate'))
-        self.bit_depth = cast(int, data.attrib.get('bitDepth'))
-        self.bitrate_mode = data.attrib.get('bitrateMode')
-        self.codec_id = data.attrib.get('codecID')
-        self.dialog_norm = cast(int, data.attrib.get('dialogNorm'))
+        self.bitDepth = cast(int, data.attrib.get('bitDepth'))
+        self.bitrateMode = data.attrib.get('bitrateMode')
+        self.dialogNorm = cast(int, data.attrib.get('dialogNorm'))
         self.duration = cast(int, data.attrib.get('duration'))
-        self.sampling_rate = cast(int, data.attrib.get('samplingRate'))
+        self.samplingRate = cast(int, data.attrib.get('samplingRate'))
         self.title = data.attrib.get('title')
 
 
-class StreamSubtitle(MediaPartStream):
-    TYPE = 3
+class SubtitleStream(MediaPartStream):
+    TYPE = 'subtitlestream'
+    STREAMTYPE = 3
 
     def __init__(self, server, data, initpath, part):
-        super(StreamSubtitle, self).__init__(server, data, initpath, part)
+        super(SubtitleStream, self).__init__(server, data, initpath, part)
         self.key = data.attrib.get('key')
-        self.language = data.attrib.get('langauge')
-        self.language_code = data.attrib.get('languageCode')
         self.format = data.attrib.get('format')
+        self.title = data.attrib.get('title')
 
 
 class TranscodeSession(object):
@@ -168,7 +163,7 @@ class TranscodeSession(object):
         self.height = cast(int, data.attrib.get('height'))
 
 
-class VideoTag(object):
+class MediaTag(object):
     TYPE = None
 
     def __init__(self, server, data):
@@ -182,9 +177,12 @@ class VideoTag(object):
         return '<%s:%s:%s>' % (self.__class__.__name__, self.id, tag)
 
 
-class Country(VideoTag): TYPE='Country'; FILTER='country'  # noqa
-class Director(VideoTag): TYPE = 'Director'; FILTER='director'  # noqa
-class Genre(VideoTag): TYPE='Genre'; FILTER='genre'  # noqa
-class Producer(VideoTag): TYPE = 'Producer'; FILTER='producer'  # noqa
-class Actor(VideoTag): TYPE = 'Role'; FILTER='actor'  # noqa
-class Writer(VideoTag): TYPE = 'Writer'; FILTER='writer'  # noqa
+class Collection(MediaTag): TYPE = 'Collection'; FILTER = 'collection'
+class Country(MediaTag): TYPE = 'Country'; FILTER = 'country'
+class Director(MediaTag): TYPE = 'Director'; FILTER = 'director'
+class Genre(MediaTag): TYPE = 'Genre'; FILTER = 'genre'
+class Mood(MediaTag): TYPE = 'Mood'; FILTER = 'mood'
+class Producer(MediaTag): TYPE = 'Producer'; FILTER = 'producer'
+class Role(MediaTag): TYPE = 'Role'; FILTER = 'role'
+class Similar(MediaTag): TYPE = 'Similar'; FILTER = 'similar'
+class Writer(MediaTag): TYPE = 'Writer'; FILTER = 'writer'
